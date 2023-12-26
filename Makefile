@@ -3,27 +3,31 @@
 
 include config.mk
 
-SRC = drw.c dmenu.c stest.c util.c
-OBJ = $(SRC:.c=.o)
+SRC = drw.c dmenu.c util.c
+OBJ = $(SRC:%.c=${BUILDDIR}/%.c.o)
 
-all: dmenu stest
+STEST_SRC = stest.c
+STEST_OBJ = $(STEST_SRC:%.c=${BUILDDIR}/%.c.o)
 
-.c.o:
-	$(CC) -c $(CFLAGS) $<
+all: ${BUILDDIR}/dmenu ${BUILDDIR}/stest
+
+${BUILDDIR}/%.c.o: %.c
+	@mkdir -p $(dir $<)
+	$(CC) -c $< $(CFLAGS) -o $@
 
 config.h:
 	cp config.def.h $@
 
 $(OBJ): arg.h config.h config.mk drw.h
 
-dmenu: dmenu.o drw.o util.o
-	$(CC) -o $@ dmenu.o drw.o util.o $(LDFLAGS)
+${BUILDDIR}/dmenu: ${OBJ}
+	$(CC) -o $@ ${OBJ} $(LDFLAGS)
 
-stest: stest.o
-	$(CC) -o $@ stest.o $(LDFLAGS)
+${BUILDDIR}/stest: ${BUILDDIR}/stest.c.o
+	$(CC) -o $@ $< $(LDFLAGS)
 
 clean:
-	rm -f dmenu stest $(OBJ) dmenu-$(VERSION).tar.gz
+	rm -f ${BUILDDIR}/dmenu ${BUILDDIR}/stest $(OBJ) ${STEST_OBJ} dmenu-$(VERSION).tar.gz
 
 dist: clean
 	mkdir -p dmenu-$(VERSION)
@@ -36,7 +40,7 @@ dist: clean
 
 install: all
 	mkdir -p $(DESTDIR)$(PREFIX)/bin
-	cp -f dmenu dmenu_path dmenu_run stest $(DESTDIR)$(PREFIX)/bin
+	cp -f ${BUILDDIR}/dmenu dmenu_path dmenu_run ${BUILDDIR}/stest $(DESTDIR)$(PREFIX)/bin
 	chmod 755 $(DESTDIR)$(PREFIX)/bin/dmenu
 	chmod 755 $(DESTDIR)$(PREFIX)/bin/dmenu_path
 	chmod 755 $(DESTDIR)$(PREFIX)/bin/dmenu_run

@@ -1,6 +1,8 @@
 # dmenu version
 VERSION = 5.2
 
+BUILDDIR = build
+
 # paths
 PREFIX = /usr/local
 MANPREFIX = $(PREFIX)/share/man
@@ -29,4 +31,4 @@ CFLAGS   = -std=c99 -pedantic -Wall -Os $(INCS) $(CPPFLAGS)
 LDFLAGS  = $(LIBS)
 
 # compiler and linker
-CC = cc
+CC = clang
