@@ -3,7 +3,7 @@
 
 include config.mk
 
-SRC = drw.c dmenu.c util.c
+SRC = drw.c dmenu.c util.c apps.c
 OBJ = $(SRC:%.c=${BUILDDIR}/%.c.o)
 
 STEST_SRC = stest.c

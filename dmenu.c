@@ -19,13 +19,17 @@
 
 #include "drw.h"
 #include "util.h"
+#include "apps.h"
+#include "item.h"
 
 /* macros */
 #define INTERSECT(x, y, w, h, r) (MAX(0, MIN((x) + (w), (r).x_org + (r).width) - MAX((x), (r).x_org)) * MAX(0, MIN((y) + (h), (r).y_org + (r).height) - MAX((y), (r).y_org)))
 #define TEXTW(X) (drw_fontset_getwidth(drw, (X)) + lrpad)
 
-#define MENU_Y_OFFSET 100
-#define MENU_WIDTH 600
+#define MENU_Y_OFFSET 40
+#define MENU_WIDTH 500
+#define MENU_SELECT_HEIGHT 60
+#define MENU_PADDING 8
 
 /* enums */
 enum
@@ -36,12 +40,11 @@ enum
 	SchemeLast
 }; /* color schemes */
 
-struct item
+typedef enum
 {
-	char *text;
-	struct item *left, *right;
-	int out;
-};
+	RUNMODE_APPS,
+	RUNMODE_BINS,
+} RunMode;
 
 static char text[BUFSIZ] = "";
 static char *embed;
@@ -49,7 +52,8 @@ static int bh, mw, mh;
 static int inputw = 0, promptw;
 static int lrpad; /* sum of left and right padding */
 static size_t cursor;
-static struct item *items = NULL;
+static struct item *g_items_bins = NULL;
+static struct item *g_items;
 static struct item *matches, *matchend;
 static struct item *prev, *curr, *next, *sel;
 static int mon = -1, screen;
@@ -65,6 +69,8 @@ static int useargb;
 
 static Drw *drw;
 static Clr *scheme[SchemeLast];
+
+static RunMode g_runmode;
 
 #include "config.h"
 
@@ -117,9 +123,9 @@ cleanup(void)
 	XUngrabKey(dpy, AnyKey, AnyModifier, root);
 	for (i = 0; i < SchemeLast; i++)
 		free(scheme[i]);
-	for (i = 0; items && items[i].text; ++i)
-		free(items[i].text);
-	free(items);
+	for (i = 0; g_items_bins && g_items_bins[i].text; ++i)
+		free(g_items_bins[i].text);
+	free(g_items_bins);
 	drw_free(drw);
 	XSync(dpy, False);
 	XCloseDisplay(dpy);
@@ -158,101 +164,58 @@ drawitem(struct item *item, int x, int y, int w)
 	return drw_text(drw, x, y, w, bh, lrpad / 2, item->text, 0);
 }
 
-static bool dmenu_is_text_custom_command(const char *buf)
-{
-	char *fnd = strchr(buf, ' ');
-	if (!fnd)
-		return false;
-
-	size_t len = strlen(buf);
-	for (char *c = fnd + 1; c < buf + len; ++c)
-	{
-		if (!iscntrl(*c))
-			return true;
-	}
-
-	return false;
-}
-
 static void
 drawmenu(void)
 {
 	unsigned int curpos;
 	struct item *item;
-	int x = 0, y = 0, w;
+	int x = MENU_PADDING, y = MENU_PADDING, w;
 
 	drw_setscheme(drw, scheme[SchemeNorm]);
 	drw_rect(drw, 0, 0, mw, mh, 1, 1);
 
-	const bool is_custom_command = dmenu_is_text_custom_command(text) || !matches;
-	if (is_custom_command)
-	{
-		char hostname[256];
-		hostname[255] = '\0';
-		gethostname(hostname, 255);
-
-		char *username = getlogin();
-		if (!username)
-			username = "???";
-
-		static char maybe_prompt_buf[512];
-		snprintf(maybe_prompt_buf, 512, "%s@%s $", username, hostname);
-
-		prompt = maybe_prompt_buf;
-		promptw = TEXTW(prompt);
-	}
-	else
-	{
-		promptw = 0;
-		prompt = NULL;
-	}
-
+	/* check if new prompt has been set and draw it */
 	if (prompt && *prompt)
 	{
 		drw_setscheme(drw, scheme[SchemeSel]);
-		x = drw_text(drw, x, 0, promptw, bh, lrpad / 2, prompt, 0);
+		x = drw_text(drw, x, y, promptw, bh, lrpad / 2, prompt, 0);
 	}
+
 	/* draw input field */
 	w = (lines > 0 || !matches) ? mw - x : inputw;
 	drw_setscheme(drw, scheme[SchemeNorm]);
-	drw_text(drw, x, 0, w, bh, lrpad / 2, text, 0);
+	drw_text(drw, x, y, w, bh, lrpad / 2, text, 0);
 
 	curpos = TEXTW(text) - TEXTW(&text[cursor]);
 	if ((curpos += lrpad / 2 - 1) < w)
 	{
 		drw_setscheme(drw, scheme[SchemeNorm]);
-		drw_rect(drw, x + curpos, 2, 2, bh - 4, 1, 0);
+		drw_rect(drw, x + curpos, y + 2, 2, bh - 4, 1, 0);
 	}
 
-	if (is_custom_command)
+	if (lines > 0 && matches)
 	{
-	}
-	else if (lines > 0)
-	{
-		/* draw vertical list */
 		for (item = curr; item != next; item = item->right)
-			drawitem(item, x, y += bh, mw - x);
+			drawitem(item, x, y += bh, mw - x * 2);
 	}
-	else if (matches)
-	{
-		/* draw horizontal list */
-		x += inputw;
-		w = TEXTW("<");
-		if (curr->left)
-		{
-			drw_setscheme(drw, scheme[SchemeNorm]);
-			drw_text(drw, x, 0, w, bh, lrpad / 2, "<", 0);
-		}
-		x += w;
-		for (item = curr; item != next; item = item->right)
-			x = drawitem(item, x, 0, textw_clamp(item->text, mw - x - TEXTW(">")));
-		if (next)
-		{
-			w = TEXTW(">");
-			drw_setscheme(drw, scheme[SchemeNorm]);
-			drw_text(drw, mw - w, 0, w, bh, lrpad / 2, ">", 0);
-		}
-	}
+
+	drw_setscheme(drw, scheme[SchemeSel]);
+	drw_rect(
+		drw,
+		x,
+		mh - MENU_SELECT_HEIGHT + MENU_PADDING * 2,
+		MENU_WIDTH / 2 - MENU_PADDING * 2,
+		MENU_SELECT_HEIGHT - MENU_PADDING * 3,
+		1, 1);
+
+	drw_rect(
+		drw,
+		x + MENU_WIDTH / 2 - MENU_PADDING,
+		mh - MENU_SELECT_HEIGHT + MENU_PADDING * 2,
+		MENU_WIDTH / 2 - MENU_PADDING,
+		MENU_SELECT_HEIGHT - MENU_PADDING * 3,
+		1, 1);
+
 	drw_map(drw, win, 0, 0, mw, mh);
 }
 
@@ -313,7 +276,7 @@ match(void)
 
 	matches = lprefix = lsubstr = matchend = prefixend = substrend = NULL;
 	textsize = strlen(text) + 1;
-	for (item = items; item && item->text; item++)
+	for (item = g_items; item && item->text; item++)
 	{
 		for (i = 0; i < tokc; i++)
 			if (!fstrstr(item->text, tokv[i]))
@@ -352,6 +315,27 @@ match(void)
 	}
 	curr = sel = matches;
 	calcoffsets();
+}
+
+static void dmenu_set_runmode(RunMode mode)
+{
+	g_runmode = mode;
+	switch (mode)
+	{
+	case RUNMODE_APPS:
+		g_items = dmenu_get_app_items();
+		break;
+
+	case RUNMODE_BINS:
+		g_items = g_items_bins;
+		break;
+
+	default:
+		g_items = NULL;
+		break;
+	}
+
+	match();
 }
 
 static void
@@ -502,6 +486,9 @@ keypress(XKeyEvent *ev)
 	{
 		switch (ksym)
 		{
+		case XK_s:
+			dmenu_set_runmode(g_runmode == RUNMODE_APPS ? RUNMODE_BINS : RUNMODE_APPS);
+			goto draw;
 		case XK_b:
 			movewordedge(-1);
 			goto draw;
@@ -615,6 +602,13 @@ keypress(XKeyEvent *ev)
 		break;
 	case XK_Return:
 	case XK_KP_Enter:
+		if (g_runmode == RUNMODE_APPS)
+		{
+			puts(sel->exec_cmd);
+			cleanup();
+			exit(0);
+		}
+
 		puts((sel && !(ev->state & ShiftMask)) ? sel->text : text);
 		if (!(ev->state & ControlMask))
 		{
@@ -688,19 +682,19 @@ readstdin(void)
 		if (i + 1 >= itemsiz)
 		{
 			itemsiz += 256;
-			if (!(items = realloc(items, itemsiz * sizeof(*items))))
-				die("cannot realloc %zu bytes:", itemsiz * sizeof(*items));
+			if (!(g_items_bins = realloc(g_items_bins, itemsiz * sizeof(*g_items_bins))))
+				die("cannot realloc %zu bytes:", itemsiz * sizeof(*g_items_bins));
 		}
 		if (line[len - 1] == '\n')
 			line[len - 1] = '\0';
-		if (!(items[i].text = strdup(line)))
+		if (!(g_items_bins[i].text = strdup(line)))
 			die("strdup:");
 
-		items[i].out = 0;
+		g_items_bins[i].out = 0;
 	}
 	free(line);
-	if (items)
-		items[i].text = NULL;
+	if (g_items_bins)
+		g_items_bins[i].text = NULL;
 	lines = MIN(lines, i);
 }
 
@@ -769,7 +763,7 @@ setup(void)
 	/* calculate menu geometry */
 	bh = drw->fonts->h + 2;
 	lines = MAX(lines, 0);
-	mh = (lines + 1) * bh;
+	mh = (lines + 1) * bh + MENU_SELECT_HEIGHT;
 #ifdef XINERAMA
 	i = 0;
 	if (parentwin == root && (info = XineramaQueryScreens(dpy, &n)))
@@ -817,8 +811,8 @@ setup(void)
 		y = wa.height / 2 - mh / 2 - MENU_Y_OFFSET;
 	}
 	promptw = (prompt && *prompt) ? TEXTW(prompt) - lrpad / 4 : 0;
-	inputw = mw; /* input width: ~33% of monitor width */
-	match();
+	inputw = mw;
+	dmenu_set_runmode(RUNMODE_APPS);
 
 	swa.border_pixel = 0x0;
 	swa.override_redirect = True;
@@ -976,8 +970,10 @@ int main(int argc, char *argv[])
 		readstdin();
 		grabkeyboard();
 	}
+
+	dmenu_apps_parse();
 	setup();
 	run();
-
+	dmenu_apps_cleanup();
 	return 1; /* unreachable */
 }
