@@ -1,5 +1,10 @@
 /* See LICENSE file for copyright and license details. */
 
+#ifndef DMENU_DRW_H
+#define DMENU_DRW_H
+
+#include "types.h"
+
 typedef struct
 {
 	Cursor cursor;
@@ -64,5 +69,9 @@ void drw_setscheme(Drw *drw, Clr *scm);
 void drw_rect(Drw *drw, int x, int y, unsigned int w, unsigned int h, int filled, int invert);
 int drw_text(Drw *drw, int x, int y, unsigned int w, unsigned int h, unsigned int lpad, const char *text, int invert);
 
+int drw_img(Drw *drw, i32 x, i32 y, u32 w, u32 h, XImage *ximage);
+
 /* Map functions */
 void drw_map(Drw *drw, Window win, int x, int y, unsigned int w, unsigned int h);
+
+#endif // !DMENU_DRW_H

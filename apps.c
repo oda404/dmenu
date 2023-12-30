@@ -12,6 +12,11 @@
 #include <dirent.h>
 #include <string.h>
 #include <stdbool.h>
+#include <stdint.h>
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+#define STB_IMAGE_RESIZE_IMPLEMENTATION
+#include "stb_image_resize2.h"
 #include "item.h"
 
 static const char *g_syswide_apps_path = "/usr/share/applications";
@@ -42,6 +47,40 @@ static int parse_desktop_file_value(const char *line, const char *name, char **o
     return 0;
 }
 
+static int find_icon_path_by_name(const char *name, char *out_path)
+{
+    char tmppath[PATH_MAX];
+    snprintf(tmppath, PATH_MAX, "/usr/share/icons/hicolor/256x256/apps/%s.png", name);
+    if (access(tmppath, F_OK) == 0)
+    {
+        snprintf(out_path, PATH_MAX, "%s", tmppath);
+        return 0;
+    }
+
+    snprintf(tmppath, PATH_MAX, "/usr/share/icons/%s.png", name);
+    if (access(tmppath, F_OK) == 0)
+    {
+        snprintf(out_path, PATH_MAX, "%s", tmppath);
+        return 0;
+    }
+
+    snprintf(tmppath, PATH_MAX, "/usr/share/icons/hicolor/128x128/apps/%s.png", name);
+    if (access(tmppath, F_OK) == 0)
+    {
+        snprintf(out_path, PATH_MAX, "%s", tmppath);
+        return 0;
+    }
+
+    snprintf(tmppath, PATH_MAX, "/usr/share/pixmaps/%s.png", name);
+    if (access(tmppath, F_OK) == 0)
+    {
+        snprintf(out_path, PATH_MAX, "%s", tmppath);
+        return 0;
+    }
+
+    return -1;
+}
+
 #define TEARDOWN_APP(_app)        \
     {                             \
         if (_app.text)            \
@@ -52,7 +91,7 @@ static int parse_desktop_file_value(const char *line, const char *name, char **o
             free(_app.exec_cmd);  \
     }
 
-static int parse_desktop_file(const char *path)
+static int parse_desktop_file(const char *path, Display *dpy, Visual *visual, size_t icon_wh)
 {
     FILE *f = fopen(path, "r");
     if (!f)
@@ -110,7 +149,6 @@ static int parse_desktop_file(const char *path)
                 *c = '\0';
         }
     }
-
     fclose(f);
 
     if (!app.exec_cmd || !app.text)
@@ -118,6 +156,56 @@ static int parse_desktop_file(const char *path)
         TEARDOWN_APP(app);
         return -1;
     }
+
+    if (app.icon_path)
+    {
+        char imgpath[PATH_MAX];
+        if (find_icon_path_by_name(app.icon_path, imgpath) < 0)
+            goto done;
+
+        int x, y, ch;
+        uint8_t *data = stbi_load(imgpath, &x, &y, &ch, 4);
+        if (!data)
+            goto done;
+
+        uint8_t *resize_data = malloc(icon_wh * icon_wh * ch);
+        if (!resize_data)
+        {
+            stbi_image_free(data);
+            goto done;
+        }
+
+        stbir_resize_uint8_linear(data, x, y, 0, resize_data, icon_wh, icon_wh, 0, (stbir_pixel_layout)ch);
+
+        /* For some fucking reason the red and blue channels are swapped and my understanding is that it's the visual's fault.
+        I tried changing the red and blue mask values for the visual but nothing changed. So this is my solution that
+        I don't know if is going to work for all cases. */
+        for (size_t i = 0; i < icon_wh * icon_wh * ch; i += ch)
+        {
+            u8 tmp = resize_data[i];
+            resize_data[i] = resize_data[i + 2];
+            resize_data[i + 2] = tmp;
+        }
+
+        app.ximage = XCreateImage(dpy, visual, ch * 8, ZPixmap, 0, (char *)resize_data, icon_wh, icon_wh, 32, 0);
+        app.ximage_w = icon_wh;
+        app.ximage_h = icon_wh;
+
+        /** As per the man page :
+         * "Note that when the image is created using XCreateImage, XGetImage, or XSubImage, the destroy p
+         * rocedure that the XDestroyImage function calls frees both the image structure and the data pointed
+         * to by the image structure."
+         * So we don't need to free 'resize_data'.
+         */
+        stbi_image_free(data);
+    }
+
+done:
+    /* I think I just found my very first compiler bug in "clang version 16.0.6". If i put a label before any
+    type of variable declaration it errors out with "error: expected expression" for that declaration.
+    If i slap some other type of instrution like ';' (a noop) it works. This will need some further investigation
+    */
+    ;
 
     struct item *tmp = realloc(g_apps, (g_app_count + 1) * sizeof(struct item));
     if (!tmp)
@@ -132,7 +220,7 @@ static int parse_desktop_file(const char *path)
     return 0;
 }
 
-static int enumerate_desktop_apps_in_dirpath(const char *dirpath)
+static int enumerate_desktop_apps_in_dirpath(const char *dirpath, Display *dpy, Visual *visual, size_t icon_wh)
 {
     DIR *d = opendir(dirpath);
     if (!d)
@@ -149,16 +237,16 @@ static int enumerate_desktop_apps_in_dirpath(const char *dirpath)
 
         char fullpath[PATH_MAX];
         snprintf(fullpath, PATH_MAX, "%s/%s", dirpath, dirent->d_name);
-        parse_desktop_file(fullpath);
+        parse_desktop_file(fullpath, dpy, visual, icon_wh);
     }
 
     closedir(d);
     return 0;
 }
 
-int dmenu_apps_parse()
+int dmenu_apps_parse(Display *dpy, Visual *visual, size_t icon_wh)
 {
-    enumerate_desktop_apps_in_dirpath(g_syswide_apps_path);
+    enumerate_desktop_apps_in_dirpath(g_syswide_apps_path, dpy, visual, icon_wh);
 
     char *user = getlogin();
     if (!user)
@@ -168,7 +256,7 @@ int dmenu_apps_parse()
     {
         char local_apps_path[PATH_MAX];
         snprintf(local_apps_path, PATH_MAX, "/home/%s/.local/share/applications", user);
-        enumerate_desktop_apps_in_dirpath(local_apps_path);
+        enumerate_desktop_apps_in_dirpath(local_apps_path, dpy, visual, icon_wh);
     }
 
     /* Mark the end of the list by a NULL text, as per whoever wrote the item matching code's (goofy) decision */

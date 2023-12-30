@@ -72,6 +72,8 @@ static Clr *scheme[SchemeLast];
 
 static RunMode g_runmode;
 
+static size_t g_app_icon_wh;
+
 #include "config.h"
 
 static int (*fstrncmp)(const char *, const char *, size_t) = strncmp;
@@ -161,7 +163,15 @@ drawitem(struct item *item, int x, int y, int w)
 	else
 		drw_setscheme(drw, scheme[SchemeNorm]);
 
-	return drw_text(drw, x, y, w, bh, lrpad / 2, item->text, 0);
+	/* Don't pad for terminal commands */
+	const size_t text_pad = item->exec_cmd ? g_app_icon_wh : 0;
+
+	int ret = drw_text(drw, x, y, w, bh, lrpad / 2 + text_pad, item->text, 0);
+
+	if (item->ximage)
+		drw_img(drw, x + 4, y + 1, g_app_icon_wh, g_app_icon_wh, item->ximage);
+
+	return ret;
 }
 
 static void
@@ -691,6 +701,11 @@ readstdin(void)
 			die("strdup:");
 
 		g_items_bins[i].out = 0;
+		g_items_bins[i].exec_cmd = NULL;
+		g_items_bins[i].icon_path = NULL;
+		g_items_bins[i].ximage = NULL;
+		g_items_bins[i].ximage_w = 0;
+		g_items_bins[i].ximage_h = 0;
 	}
 	free(line);
 	if (g_items_bins)
@@ -971,7 +986,8 @@ int main(int argc, char *argv[])
 		grabkeyboard();
 	}
 
-	dmenu_apps_parse();
+	g_app_icon_wh = drw->fonts->h;
+	dmenu_apps_parse(dpy, visual, g_app_icon_wh);
 	setup();
 	run();
 	dmenu_apps_cleanup();

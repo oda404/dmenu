@@ -412,6 +412,12 @@ int drw_text(Drw *drw, int x, int y, unsigned int w, unsigned int h, unsigned in
 	return x + (render ? w : 0);
 }
 
+int drw_img(Drw *drw, i32 x, i32 y, u32 w, u32 h, XImage *ximage)
+{
+	XPutImage(drw->dpy, drw->drawable, drw->gc, ximage, 0, 0, x, y, w, h);
+	return 0;
+}
+
 void drw_map(Drw *drw, Window win, int x, int y, unsigned int w, unsigned int h)
 {
 	if (!drw)
