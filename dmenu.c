@@ -810,7 +810,7 @@ setup(void)
 					break;
 
 		mw = MENU_WIDTH;
-		x = info[i].width / 2 - mw / 2;
+		x = info[i].x_org + (info[i].width / 2 - mw / 2);
 		y = info[i].y_org + (info[i].height / 2 - mh / 2) - MENU_Y_OFFSET;
 		XFree(info);
 	}
