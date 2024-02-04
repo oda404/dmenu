@@ -27,8 +27,8 @@
 #define TEXTW(X) (drw_fontset_getwidth(drw, (X)) + lrpad)
 
 #define MENU_Y_OFFSET 40
-#define MENU_WIDTH 500
-#define MENU_SELECT_HEIGHT 60
+#define MENU_WIDTH 400
+#define MENU_SELECT_HEIGHT 50
 #define MENU_PADDING 8
 
 /* enums */
