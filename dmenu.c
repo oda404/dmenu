@@ -169,7 +169,11 @@ drawitem(struct item *item, int x, int y, int w)
 	int ret = drw_text(drw, x, y, w, bh, lrpad / 2 + text_pad, item->text, 0);
 
 	if (item->ximage)
-		drw_img(drw, x + 4, y + 1, g_app_icon_wh, g_app_icon_wh, item->ximage);
+	{
+		size_t iconx = (x + lrpad + g_app_icon_wh) / 2 - g_app_icon_wh / 2;
+		size_t icony = y + (bh - g_app_icon_wh) / 2;
+		drw_img(drw, iconx, icony, g_app_icon_wh, g_app_icon_wh, item->ximage);
+	}
 
 	return ret;
 }
@@ -189,19 +193,16 @@ drawmenu(void)
 	{
 		drw_setscheme(drw, scheme[SchemeSel]);
 		x = drw_text(drw, x, y, promptw, bh, lrpad / 2, prompt, 0);
+		drw_setscheme(drw, scheme[SchemeNorm]);
 	}
 
 	/* draw input field */
 	w = (lines > 0 || !matches) ? mw - x : inputw;
-	drw_setscheme(drw, scheme[SchemeNorm]);
-	drw_text(drw, x, y, w, bh, lrpad / 2, text, 0);
+	drw_text(drw, 0, y, w, bh, lrpad / 2, text, 0);
 
 	curpos = TEXTW(text) - TEXTW(&text[cursor]);
 	if ((curpos += lrpad / 2 - 1) < w)
-	{
-		drw_setscheme(drw, scheme[SchemeNorm]);
-		drw_rect(drw, x + curpos, y + 2, 2, bh - 4, 1, 0);
-	}
+		drw_rect(drw, curpos, y + 2, 2, bh - 4, 1, 0);
 
 	if (lines > 0 && matches)
 	{
