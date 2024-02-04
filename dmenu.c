@@ -26,10 +26,6 @@
 #define INTERSECT(x, y, w, h, r) (MAX(0, MIN((x) + (w), (r).x_org + (r).width) - MAX((x), (r).x_org)) * MAX(0, MIN((y) + (h), (r).y_org + (r).height) - MAX((y), (r).y_org)))
 #define TEXTW(X) (drw_fontset_getwidth(drw, (X)) + lrpad)
 
-#define MENU_Y_OFFSET 40
-#define MENU_WIDTH 400
-#define MENU_SELECT_HEIGHT 50
-#define MENU_PADDING 8
 
 /* enums */
 enum
@@ -242,7 +238,11 @@ drawmenu(void)
 
 	draw_scrollbar(scrollbar_y);
 
-	drw_setscheme(drw, scheme[SchemeSel]);
+	if (g_runmode == RUNMODE_APPS)
+		drw_setscheme(drw, scheme[SchemeSel]);
+	else
+		drw_setscheme(drw, scheme[SchemeNorm]);
+
 	drw_rect(
 		drw,
 		x,
@@ -251,6 +251,11 @@ drawmenu(void)
 		MENU_SELECT_HEIGHT - MENU_PADDING * 3,
 		1, 1);
 
+	if (g_runmode == RUNMODE_BINS)
+		drw_setscheme(drw, scheme[SchemeSel]);
+	else
+		drw_setscheme(drw, scheme[SchemeNorm]);
+
 	drw_rect(
 		drw,
 		x + MENU_WIDTH / 2 - MENU_PADDING,
@@ -258,6 +263,28 @@ drawmenu(void)
 		MENU_WIDTH / 2 - MENU_PADDING,
 		MENU_SELECT_HEIGHT - MENU_PADDING * 3,
 		1, 1);
+
+	drw_setscheme(drw, scheme[SchemeSel]);
+
+	drw_text(
+		drw,
+		x + (MENU_WIDTH) / 4 - TEXTW("Applications") / 2,
+		mh - (MENU_SELECT_HEIGHT + MENU_PADDING) / 2 + drw->fonts->h / 2 - 1,
+		TEXTW("Applications"),
+		0,
+		0,
+		"Applications",
+		0);
+
+	drw_text(
+		drw,
+		x + MENU_WIDTH - MENU_WIDTH / 4 - TEXTW("Binaries") / 2,
+		mh - (MENU_SELECT_HEIGHT + MENU_PADDING) / 2 + drw->fonts->h / 2 - 1,
+		TEXTW("Binaries"),
+		0,
+		0,
+		"Binaries",
+		0);
 
 	drw_map(drw, win, 0, 0, mw, mh);
 }
