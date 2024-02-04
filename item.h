@@ -15,6 +15,8 @@ struct item
     char *icon_path;
 
     XImage *ximage;
+    /* For blending */
+    u8 *orig_image_data;
     u32 ximage_w;
     u32 ximage_h;
 };

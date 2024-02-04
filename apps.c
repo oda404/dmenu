@@ -81,14 +81,16 @@ static int find_icon_path_by_name(const char *name, char *out_path)
     return -1;
 }
 
-#define TEARDOWN_APP(_app)        \
-    {                             \
-        if (_app.text)            \
-            free(_app.text);      \
-        if (_app.icon_path)       \
-            free(_app.icon_path); \
-        if (_app.exec_cmd)        \
-            free(_app.exec_cmd);  \
+#define TEARDOWN_APP(_app)              \
+    {                                   \
+        if (_app.text)                  \
+            free(_app.text);            \
+        if (_app.icon_path)             \
+            free(_app.icon_path);       \
+        if (_app.exec_cmd)              \
+            free(_app.exec_cmd);        \
+        if (_app.orig_image_data)       \
+            free(_app.orig_image_data); \
     }
 
 static int parse_desktop_file(const char *path, Display *dpy, Visual *visual, size_t icon_wh)
@@ -168,28 +170,37 @@ static int parse_desktop_file(const char *path, Display *dpy, Visual *visual, si
         if (!data)
             goto done;
 
-        uint8_t *resize_data = malloc(icon_wh * icon_wh * ch);
+        uint8_t *resize_data = malloc(icon_wh * icon_wh * 4);
         if (!resize_data)
         {
             stbi_image_free(data);
             goto done;
         }
 
-        stbir_resize_uint8_linear(data, x, y, 0, resize_data, icon_wh, icon_wh, 0, (stbir_pixel_layout)ch);
+        stbir_resize_uint8_linear(data, x, y, 0, resize_data, icon_wh, icon_wh, 0, (stbir_pixel_layout)4);
 
         /* For some fucking reason the red and blue channels are swapped and my understanding is that it's the visual's fault.
         I tried changing the red and blue mask values for the visual but nothing changed. So this is my solution that
         I don't know if is going to work for all cases. */
-        for (size_t i = 0; i < icon_wh * icon_wh * ch; i += ch)
+        for (size_t i = 0; i < icon_wh * icon_wh * 4; i += 4)
         {
             u8 tmp = resize_data[i];
             resize_data[i] = resize_data[i + 2];
             resize_data[i + 2] = tmp;
         }
 
-        app.ximage = XCreateImage(dpy, visual, ch * 8, ZPixmap, 0, (char *)resize_data, icon_wh, icon_wh, 32, 0);
+        app.ximage = XCreateImage(dpy, visual, 4 * 8, ZPixmap, 0, (char *)resize_data, icon_wh, icon_wh, 32, 0);
         app.ximage_w = icon_wh;
         app.ximage_h = icon_wh;
+
+        /* Keep a copy of the original image for alpha blending */
+        app.orig_image_data = malloc(icon_wh * icon_wh * 4);
+        if (!app.orig_image_data)
+        {
+            stbi_image_free(data);
+            goto done;
+        }
+        memcpy(app.orig_image_data, resize_data, icon_wh * icon_wh * 4);
 
         /** As per the man page :
          * "Note that when the image is created using XCreateImage, XGetImage, or XSubImage, the destroy p
