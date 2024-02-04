@@ -72,12 +72,12 @@ static Clr *scheme[SchemeLast];
 
 static RunMode g_runmode;
 
-static size_t g_app_icon_wh;
-
 #include "config.h"
 
-static int (*fstrncmp)(const char *, const char *, size_t) = strncmp;
-static char *(*fstrstr)(const char *, const char *) = strstr;
+/* Force case insensitive matching for apps */
+static char *cistrstr(const char *h, const char *n);
+static int (*fstrncmp)(const char *, const char *, size_t) = strncasecmp;
+static char *(*fstrstr)(const char *, const char *) = cistrstr;
 
 static unsigned int
 textw_clamp(const char *str, unsigned int n)
@@ -196,8 +196,9 @@ static void draw_scrollbar(size_t starty)
 	if (!item_count)
 		return;
 
-	size_t barh = 30;
-	size_t maxy = mh - MENU_SELECT_HEIGHT + MENU_PADDING * 2 - barh;
+	/* I could make this dynamic but I don't like how it looks when there are a lot of elements */
+	size_t barh = MENU_SELECT_HEIGHT - MENU_PADDING * 3;
+	size_t maxy = mh - MENU_PADDING - barh;
 
 	float progress = (float)sel_idx / (item_count > 1 ? (float)item_count - 1 : 1.f);
 	size_t off = (maxy - starty) * progress;
@@ -956,11 +957,6 @@ int main(int argc, char *argv[])
 		}
 		else if (!strcmp(argv[i], "-f")) /* grabs keyboard before reading stdin */
 			fast = 1;
-		else if (!strcmp(argv[i], "-i"))
-		{ /* case-insensitive item matching */
-			fstrncmp = strncasecmp;
-			fstrstr = cistrstr;
-		}
 		else if (i + 1 == argc)
 			usage();
 		/* these options take one argument */
