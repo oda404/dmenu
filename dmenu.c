@@ -178,6 +178,34 @@ drawitem(struct item *item, int x, int y, int w)
 	return ret;
 }
 
+static void draw_scrollbar(size_t starty)
+{
+	size_t item_count = 0;
+	size_t sel_idx = 0;
+	for (struct item *item = matches; true; item = item->right)
+	{
+		if (item == sel)
+			sel_idx = item_count;
+
+		++item_count;
+		// Check here to account for it
+		if (item == matchend)
+			break;
+	}
+
+	if (!item_count)
+		return;
+
+	size_t barh = 30;
+	size_t maxy = mh - MENU_SELECT_HEIGHT + MENU_PADDING * 2 - barh;
+
+	float progress = (float)sel_idx / (item_count > 1 ? (float)item_count - 1 : 1.f);
+	size_t off = (maxy - starty) * progress;
+
+	drw_setscheme(drw, scheme[SchemeSel]);
+	drw_rect(drw, MENU_WIDTH - MENU_PADDING / 2 - 1, starty + off, 2, barh, 1, 1);
+}
+
 static void
 drawmenu(void)
 {
@@ -204,11 +232,14 @@ drawmenu(void)
 	if ((curpos += lrpad / 2 - 1) < w)
 		drw_rect(drw, curpos, y + 2, 2, bh - 4, 1, 0);
 
+	size_t scrollbar_y = y + bh;
 	if (lines > 0 && matches)
 	{
 		for (item = curr; item != next; item = item->right)
 			drawitem(item, x, y += bh, mw - x * 2);
 	}
+
+	draw_scrollbar(scrollbar_y);
 
 	drw_setscheme(drw, scheme[SchemeSel]);
 	drw_rect(
