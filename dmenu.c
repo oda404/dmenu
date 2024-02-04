@@ -215,9 +215,9 @@ static void draw_scrollbar(size_t starty)
 	if (!item_count)
 		return;
 
-	/* I could make this dynamic but I don't like how it looks when there are a lot of elements */
-	size_t barh = MENU_SELECT_HEIGHT - MENU_PADDING * 3;
-	size_t maxy = mh - MENU_PADDING - barh;
+	size_t maxy = mh - MENU_PADDING;
+	size_t barh = MAX(MENU_SELECT_HEIGHT - MENU_PADDING * 3, maxy / item_count);
+	maxy -= barh;
 
 	float progress = (float)sel_idx / (item_count > 1 ? (float)item_count - 1 : 1.f);
 	size_t off = (maxy - starty) * progress;
@@ -261,33 +261,28 @@ drawmenu(void)
 
 	draw_scrollbar(scrollbar_y);
 
+	drw_setscheme(drw, scheme[SchemeSel]);
 	if (g_runmode == RUNMODE_APPS)
-		drw_setscheme(drw, scheme[SchemeSel]);
-	else
-		drw_setscheme(drw, scheme[SchemeNorm]);
-
-	drw_rect(
-		drw,
-		x,
-		mh - MENU_SELECT_HEIGHT + MENU_PADDING * 2,
-		MENU_WIDTH / 2 - MENU_PADDING * 2,
-		MENU_SELECT_HEIGHT - MENU_PADDING * 3,
-		1, 1);
+	{
+		drw_rect(
+			drw,
+			x,
+			mh - MENU_SELECT_HEIGHT + MENU_PADDING * 2,
+			MENU_WIDTH / 2 - MENU_PADDING * 2,
+			MENU_SELECT_HEIGHT - MENU_PADDING * 3,
+			1, 1);
+	}
 
 	if (g_runmode == RUNMODE_BINS)
-		drw_setscheme(drw, scheme[SchemeSel]);
-	else
-		drw_setscheme(drw, scheme[SchemeNorm]);
-
-	drw_rect(
-		drw,
-		x + MENU_WIDTH / 2 - MENU_PADDING,
-		mh - MENU_SELECT_HEIGHT + MENU_PADDING * 2,
-		MENU_WIDTH / 2 - MENU_PADDING,
-		MENU_SELECT_HEIGHT - MENU_PADDING * 3,
-		1, 1);
-
-	drw_setscheme(drw, scheme[SchemeSel]);
+	{
+		drw_rect(
+			drw,
+			x + MENU_WIDTH / 2 - MENU_PADDING,
+			mh - MENU_SELECT_HEIGHT + MENU_PADDING * 2,
+			MENU_WIDTH / 2 - MENU_PADDING,
+			MENU_SELECT_HEIGHT - MENU_PADDING * 3,
+			1, 1);
+	}
 
 	drw_text(
 		drw,
