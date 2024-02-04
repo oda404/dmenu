@@ -615,7 +615,8 @@ keypress(XKeyEvent *ev)
 	case XK_KP_Enter:
 		if (g_runmode == RUNMODE_APPS)
 		{
-			puts(sel->exec_cmd);
+			if (sel)
+				puts(sel->exec_cmd);
 			cleanup();
 			exit(0);
 		}
