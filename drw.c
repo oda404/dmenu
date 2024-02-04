@@ -190,12 +190,40 @@ void drw_fontset_free(Fnt *font)
 	}
 }
 
-void drw_clr_create(Drw *drw, Clr *dest, const char *clrname, unsigned int alpha)
+void drw_clr_create(Drw *drw, Clr *dest, const char *clrname)
 {
 	if (!drw || !dest || !clrname)
 		return;
 
-	if (!XftColorAllocName(drw->dpy, drw->visual, drw->cmap, clrname, dest))
+	char rgb[8];
+	u32 alpha;
+
+	size_t clrname_len = strlen(clrname);
+	if (clrname_len == 9)
+	{
+		rgb[0] = '#';
+		rgb[1] = clrname[3];
+		rgb[2] = clrname[4];
+		rgb[3] = clrname[5];
+		rgb[4] = clrname[6];
+		rgb[5] = clrname[7];
+		rgb[6] = clrname[8];
+		rgb[7] = '\0';
+
+		char stralpha[] = {clrname[1], clrname[2], '\0'};
+		alpha = strtoul(stralpha, NULL, 16);
+	}
+	else if (clrname_len == 7)
+	{
+		strcpy(rgb, clrname);
+		alpha = 0xFF;
+	}
+	else
+	{
+		die("Bad color '%s'!", clrname);
+	}
+
+	if (!XftColorAllocName(drw->dpy, drw->visual, drw->cmap, rgb, dest))
 		die("error, cannot allocate color '%s'", clrname);
 
 	dest->pixel = (dest->pixel & 0x00ffffffU) | (alpha << 24);
@@ -203,7 +231,7 @@ void drw_clr_create(Drw *drw, Clr *dest, const char *clrname, unsigned int alpha
 
 /* Wrapper to create color schemes. The caller has to call free(3) on the
  * returned color scheme when done using it. */
-Clr *drw_scm_create(Drw *drw, const char *clrnames[], unsigned int clralphas[], size_t clrcount)
+Clr *drw_scm_create(Drw *drw, const char *clrnames[], size_t clrcount)
 {
 	size_t i;
 	Clr *ret;
@@ -213,7 +241,7 @@ Clr *drw_scm_create(Drw *drw, const char *clrnames[], unsigned int clralphas[], 
 		return NULL;
 
 	for (i = 0; i < clrcount; i++)
-		drw_clr_create(drw, &ret[i], clrnames[i], clralphas[i]);
+		drw_clr_create(drw, &ret[i], clrnames[i]);
 	return ret;
 }
 
