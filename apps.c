@@ -67,6 +67,13 @@ static int find_icon_path_by_name(const char *name, char *out_path)
         return 0;
     }
 
+    snprintf(tmppath, PATH_MAX, "/usr/share/icons/hicolor/64x64/apps/%s.png", name);
+    if (access(tmppath, F_OK) == 0)
+    {
+        snprintf(out_path, PATH_MAX, "%s", tmppath);
+        return 0;
+    }
+
     snprintf(tmppath, PATH_MAX, "/usr/share/pixmaps/%s.png", name);
     if (access(tmppath, F_OK) == 0)
     {
@@ -145,6 +152,12 @@ static int parse_desktop_file(const char *path, Drw *drw, size_t icon_wh)
             char *c = strchr(app.exec_cmd, '%');
             if (c)
                 *c = '\0';
+        }
+        else if (strstr(line, "NoDisplay=true") == line)
+        {
+            TEARDOWN_APP(app);
+            fclose(f);
+            return 0;
         }
     }
     fclose(f);
