@@ -4,6 +4,10 @@
 #include <string.h>
 #include <X11/Xlib.h>
 #include <X11/Xft/Xft.h>
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+#define STB_IMAGE_RESIZE_IMPLEMENTATION
+#include "stb_image_resize2.h"
 
 #include "drw.h"
 #include "util.h"
@@ -440,9 +444,110 @@ int drw_text(Drw *drw, int x, int y, unsigned int w, unsigned int h, unsigned in
 	return x + (render ? w : 0);
 }
 
-int drw_img(Drw *drw, i32 x, i32 y, u32 w, u32 h, XImage *ximage)
+Img *drw_img_load(Drw *drw, const char *path, size_t w, size_t h)
 {
-	XPutImage(drw->dpy, drw->drawable, drw->gc, ximage, 0, 0, x, y, w, h);
+	Img *img = calloc(1, sizeof(Img));
+	if (!img)
+		return NULL;
+
+	int initial_w, initial_h, ch;
+	uint8_t *data = stbi_load(path, &initial_w, &initial_h, &ch, 4);
+	if (!data)
+	{
+		free(img);
+		return NULL;
+	}
+
+	const size_t actual_w = w > 0 ? w : initial_w;
+	const size_t actual_h = h > 0 ? h : initial_h;
+
+	if (actual_w != initial_w || actual_h != initial_h)
+	{
+		uint8_t *resize_data = malloc(actual_w * actual_h * 4);
+		if (!resize_data)
+		{
+			stbi_image_free(data);
+			free(img);
+			return NULL;
+		}
+
+		stbir_resize_uint8_linear(data, initial_w, initial_h, 0, resize_data, actual_w, actual_h, 0, (stbir_pixel_layout)4);
+
+		/* For some fucking reason the red and blue channels are swapped and my understanding is that it's the visual's fault.
+		I tried changing the red and blue mask values for the visual but nothing changed. So this is my solution that
+		I don't know if is going to work for all cases. */
+		for (size_t i = 0; i < actual_w * actual_h * 4; i += 4)
+		{
+			u8 tmp = resize_data[i];
+			resize_data[i] = resize_data[i + 2];
+			resize_data[i + 2] = tmp;
+		}
+
+		stbi_image_free(data);
+		data = resize_data;
+	}
+
+	img->ximage = XCreateImage(drw->dpy, drw->visual, 4 * 8, ZPixmap, 0, (char *)data, actual_w, actual_h, 32, 0);
+	img->width = actual_w;
+	img->height = actual_h;
+
+	/* Keep a copy of the original image for alpha blending */
+	img->image_original_data = malloc(actual_w * actual_h * 4);
+	if (!img->image_original_data)
+	{
+		XDestroyImage(img->ximage);
+		/** As per the man page :
+		 * "Note that when the image is created using XCreateImage, XGetImage, or XSubImage, the destroy p
+		 * rocedure that the XDestroyImage function calls frees both the image structure and the data pointed
+		 * to by the image structure."
+		 * So we don't need to free 'data'.
+		 */
+		free(img);
+		return NULL;
+	}
+
+	memcpy(img->image_original_data, data, actual_w * actual_h * 4);
+	return img;
+}
+
+void drw_img_free(Img *img)
+{
+	XDestroyImage(img->ximage);
+	free(img->image_original_data);
+	free(img);
+}
+
+int drw_img(Drw *drw, Img *img, i32 x, i32 y)
+{
+	XImage *bgimage = XGetImage(drw->dpy, drw->drawable, x, y, img->width, img->height, 0xFFFFFFFF, ZPixmap);
+
+	/* Alpha blending in software cause X11 is bitch */
+	for (size_t i = 0; i < img->width * img->height * 4; i += 4)
+	{
+		// Opaque, no point in blending
+		if ((u8)img->image_original_data[i + 3] == 0xFF)
+			continue;
+
+		/* FIXME: There's something waiting to go wrong here with the endianness */
+		float a0 = img->image_original_data[i + 3] / 255.f;
+		float a1 = ((u8)bgimage->data[i + 3]) / 255.f;
+		float a01 = (1 - a0) * a1 + a0;
+
+		u8 r = ((1 - a0) * a1 * ((u8)bgimage->data[i + 0]) + a0 * img->image_original_data[i]) / a01;
+		u8 g = ((1 - a0) * a1 * ((u8)bgimage->data[i + 1]) + a0 * img->image_original_data[i + 1]) / a01;
+		u8 b = ((1 - a0) * a1 * ((u8)bgimage->data[i + 2]) + a0 * img->image_original_data[i + 2]) / a01;
+
+		img->ximage->data[i] = r;
+		img->ximage->data[i + 1] = g;
+		img->ximage->data[i + 2] = b;
+		img->ximage->data[i + 3] = a01 * 255;
+	}
+
+	/* NOWHERE IN THE FUCKING MANPAGE FOR XGetImage does it mention that XDestroyImage needs to be called on the returned XImage
+	to avoid memory leaks. NOT THO MENTION the fact that the word Get in XGetImage does not in any way indicate allocation>????
+	Horrible documentation, horrible fortune, plenty memory leaks */
+	XDestroyImage(bgimage);
+	XPutImage(drw->dpy, drw->drawable, drw->gc, img->ximage, 0, 0, x, y, img->width, img->height);
 	return 0;
 }
 

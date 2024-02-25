@@ -164,34 +164,11 @@ drawitem(struct item *item, int x, int y, int w)
 	const size_t text_pad = item->exec_cmd ? ICON_SIZE(drw) : 0;
 	int ret = drw_text(drw, x, y, w, bh, lrpad / 2 + text_pad, item->text, 0);
 
-	if (item->ximage)
+	if (item->img)
 	{
-		// software alpha blending cause X is a bitch
-		for (size_t i = 0; i < item->ximage_w * item->ximage_h * 4; i += 4)
-		{
-			// Opaque, no point in blending
-			if ((u8)item->orig_image_data[i + 3] == 0xFF)
-				continue;
-
-			/* FIXME: There's something waiting to go wrong here with the endianness */
-			float a0 = (float)item->orig_image_data[i + 3] / 255.f;
-			float a1 = (float)((drw->scheme[ColBg].pixel >> 24) & 0xFF) / 255.f;
-			float a01 = (1.f - a0) * a1 + a0;
-
-			/* Again X with some fuckery when it comes to color endianness */
-			u8 r = ((1 - a0) * a1 * (float)((drw->scheme[ColBg].pixel >> 0) & 0xFF) + a0 * (float)item->orig_image_data[i]) / a01;
-			u8 g = ((1 - a0) * a1 * (float)((drw->scheme[ColBg].pixel >> 8) & 0xFF) + a0 * (float)item->orig_image_data[i + 1]) / a01;
-			u8 b = ((1 - a0) * a1 * (float)((drw->scheme[ColBg].pixel >> 16) & 0xFF) + a0 * (float)item->orig_image_data[i + 2]) / a01;
-
-			item->ximage->data[i] = r;
-			item->ximage->data[i + 1] = g;
-			item->ximage->data[i + 2] = b;
-			item->ximage->data[i + 3] = a01 * 255;
-		}
-
-		size_t iconx = (x + lrpad + item->ximage_w) / 2 - item->ximage_w / 2;
-		size_t icony = y + (bh - item->ximage_h) / 2;
-		drw_img(drw, iconx, icony, item->ximage_w, item->ximage_h, item->ximage);
+		size_t iconx = (x + lrpad + item->img->width) / 2 - item->img->width / 2;
+		size_t icony = y + (bh - item->img->height) / 2;
+		drw_img(drw, item->img, iconx, icony);
 	}
 
 	return ret;
@@ -782,9 +759,7 @@ readstdin(void)
 		g_items_bins[i].out = 0;
 		g_items_bins[i].exec_cmd = NULL;
 		g_items_bins[i].icon_path = NULL;
-		g_items_bins[i].ximage = NULL;
-		g_items_bins[i].ximage_w = 0;
-		g_items_bins[i].ximage_h = 0;
+		g_items_bins[i].img = NULL;
 	}
 	free(line);
 	if (g_items_bins)
@@ -1060,7 +1035,7 @@ int main(int argc, char *argv[])
 		grabkeyboard();
 	}
 
-	dmenu_apps_parse(dpy, visual, ICON_SIZE(drw));
+	dmenu_apps_parse(drw, ICON_SIZE(drw));
 	setup();
 	run();
 	return 1; /* unreachable */

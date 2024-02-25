@@ -3,6 +3,7 @@
 #ifndef DMENU_DRW_H
 #define DMENU_DRW_H
 
+#include <X11/Xft/Xft.h>
 #include "types.h"
 
 typedef struct
@@ -41,6 +42,16 @@ typedef struct
 	Fnt *fonts;
 } Drw;
 
+typedef struct
+{
+	XImage *ximage;
+	/* For alpha blending */
+	u8 *image_original_data;
+	size_t width;
+	size_t height;
+	u8 channels;
+} Img;
+
 /* Drawable abstraction */
 Drw *drw_create(Display *dpy, int screen, Window root, unsigned int w, unsigned int h, Visual *visual, unsigned int depth, Colormap cmap);
 void drw_resize(Drw *drw, unsigned int w, unsigned int h);
@@ -69,7 +80,18 @@ void drw_setscheme(Drw *drw, Clr *scm);
 void drw_rect(Drw *drw, int x, int y, unsigned int w, unsigned int h, int filled, int invert);
 int drw_text(Drw *drw, int x, int y, unsigned int w, unsigned int h, unsigned int lpad, const char *text, int invert);
 
-int drw_img(Drw *drw, i32 x, i32 y, u32 w, u32 h, XImage *ximage);
+/**
+ * Load an image to use with drw_img. The image is automatically alpha blended in software.
+ *
+ * path: Path on disk to the image file.
+ * w: The desired width of the image. 0 if it should mentain it's original width
+ * h: The desired height of the image. 0 if it should mentain it's original height
+
+ *
+ */
+Img *drw_img_load(Drw *drw, const char *path, size_t w, size_t h);
+int drw_img(Drw *drw, Img *img, i32 x, i32 y);
+void drw_img_free(Img *img);
 
 /* Map functions */
 void drw_map(Drw *drw, Window win, int x, int y, unsigned int w, unsigned int h);

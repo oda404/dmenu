@@ -4,6 +4,7 @@
 
 #include <X11/Xlib.h>
 #include "types.h"
+#include "drw.h"
 
 struct item
 {
@@ -14,11 +15,7 @@ struct item
     char *exec_cmd;
     char *icon_path;
 
-    XImage *ximage;
-    /* For blending */
-    u8 *orig_image_data;
-    u32 ximage_w;
-    u32 ximage_h;
+    Img *img;
 };
 
 #endif // !DMENU_ITEM_H

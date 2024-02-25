@@ -31,4 +31,4 @@ CFLAGS   = -std=c2x -Wall -Os $(INCS) $(CPPFLAGS)
 LDFLAGS  = $(LIBS)
 
 # compiler and linker
-CC = clang
+CC ?= clang
